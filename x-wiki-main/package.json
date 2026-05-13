@@ -1,0 +1,95 @@
+{
+  "name": "axiom-wiki",
+  "version": "0.7.2",
+  "description": "The wiki that maintains itself. AI-powered personal knowledge base that ingests documents, extracts entities, and maintains a structured wiki.",
+  "type": "module",
+  "bin": {
+    "axiom-wiki": "./dist/bin/axiom-wiki.js",
+    "axwiki": "./dist/bin/axiom-wiki.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch bin/axiom-wiki.ts",
+    "start": "node dist/bin/axiom-wiki.js",
+    "prepublishOnly": "pnpm build",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "wiki",
+    "knowledge-base",
+    "ai",
+    "llm",
+    "notes",
+    "markdown",
+    "rag",
+    "gemini",
+    "openai",
+    "anthropic",
+    "ollama",
+    "openrouter",
+    "deepseek",
+    "groq",
+    "mistral",
+    "mcp",
+    "cli",
+    "personal-knowledge-base",
+    "document-ingestion",
+    "karpathy",
+    "llm-wiki",
+    "self-maintaining-wiki",
+    "knowledge-compilation",
+    "knowledge-compiler"
+  ],
+  "author": "Abubakar Siddik",
+  "license": "SEE LICENSE IN LICENSE",
+  "homepage": "https://github.com/abubakarsiddik31/axiom-wiki#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abubakarsiddik31/axiom-wiki.git"
+  },
+  "bugs": {
+    "url": "https://github.com/abubakarsiddik31/axiom-wiki/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.68",
+    "@ai-sdk/google": "^3.0.61",
+    "@ai-sdk/openai": "^3.0.52",
+    "@mastra/core": "^1.24.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@mozilla/readability": "^0.6.0",
+    "@orama/orama": "^3.1.18",
+    "ai": "^6.0.168",
+    "chalk": "^5.6.2",
+    "chokidar": "^5.0.0",
+    "commander": "^14.0.3",
+    "conf": "^15.1.0",
+    "gray-matter": "^4.0.3",
+    "ignore": "^7.0.5",
+    "ink": "^5.2.1",
+    "ink-select-input": "^6.2.0",
+    "ink-text-input": "^6.0.0",
+    "jsdom": "^29.0.2",
+    "mammoth": "^1.12.0",
+    "node-html-markdown": "^2.0.0",
+    "react": "^18.3.1",
+    "slugify": "^1.6.9",
+    "terminal-image": "^4.3.0",
+    "tiktoken": "^1.0.22",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^28.0.1",
+    "@types/node": "^25.6.0",
+    "@types/react": "^18.3.28",
+    "pnpm": "^11.0.8",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
+  }
+}

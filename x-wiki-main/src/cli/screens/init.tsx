@@ -1,0 +1,1017 @@
+import React, { useState, useEffect } from 'react'
+import { Box, Text, useInput, useApp } from 'ink'
+import TextInput from 'ink-text-input'
+import SelectInput from 'ink-select-input'
+import os from 'os'
+import path from 'path'
+import fs from 'fs'
+import { execSync } from 'child_process'
+import { setConfig, clearConfig, setLocalConfig, findLocalConfig, isLegacyLocalConfig, clearLocalConfigCache, type ConfigScope, type AxiomConfig } from '../../config/index.js'
+import { VERSION } from '../../version.js'
+import { PROVIDERS, listProviders, type ProviderId } from '../../config/models.js'
+import type { PreProcessMode, PreProcessStructure } from '../../config/endpoints.js'
+import { withRetry } from '../../core/retry.js'
+import { scaffoldWiki } from '../../core/wiki.js'
+import { createAxiomAgent } from '../../agent/index.js'
+import { reindexWiki } from '../../core/indexing.js'
+import { fetchOllamaModels, ollamaModelsToSelectItems, pullOllamaModel, formatPullProgress, OLLAMA_SUGGESTED_MODELS, type OllamaModel } from '../../core/ollama.js'
+import { fetchOpenRouterModels, pickPopularModels, formatModelLabel, type OpenRouterModel } from '../../core/openrouter.js'
+
+// Steps: 0=welcome 0.5=migrate 1=scope 2=provider 3=apiKey(or ollamaUrl) 4=model 5=wikiDir 6=rawDir 6.5=embeddings 6.6=preProcess 6.65=vision 6.7=preProcessStructure 6.8=preProcessConfirmIngest 6.9=preProcessConfirmWatch 6.95=llmCallFlag 7=scaffold 8=done
+type Step = 0 | 0.5 | 1 | 2 | 3 | 4 | 5 | 6 | 6.5 | 6.6 | 6.65 | 6.7 | 6.8 | 6.9 | 6.95 | 7 | 8
+
+const SUPPORTED_EXTS = ['.md', '.txt', '.pdf', '.png', '.jpg', '.jpeg', '.webp', '.html', '.docx']
+
+function expandTilde(p: string): string {
+  if (p.startsWith('~/')) return path.join(os.homedir(), p.slice(2))
+  if (p === '~') return os.homedir()
+  return p
+}
+
+/** Check if a directory looks like a legacy axiom wiki (has wiki/pages or wiki/index.md). */
+function isLegacyWikiDir(dir: string): boolean {
+  return fs.existsSync(path.join(dir, 'wiki', 'index.md')) || fs.existsSync(path.join(dir, 'wiki', 'pages'))
+}
+
+function detectContext() {
+  let gitRoot: string | null = null
+  try {
+    gitRoot = execSync('git rev-parse --show-toplevel', {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf-8',
+    }).trim()
+  } catch {
+    // not a git repo
+  }
+
+  const isHomedir = process.cwd() === os.homedir()
+  const existingLocalConfig = findLocalConfig()
+
+  // Detect legacy ~/my-wiki global directory from older versions
+  const legacyGlobalDir = path.join(os.homedir(), 'my-wiki')
+  const newGlobalDir = path.join(os.homedir(), 'axiom')
+  const hasLegacyGlobal = fs.existsSync(legacyGlobalDir) && isLegacyWikiDir(legacyGlobalDir) && !fs.existsSync(newGlobalDir)
+
+  // Detect legacy .axiom/ local directory from older versions
+  const legacyLocalDir = path.join(process.cwd(), '.axiom')
+  const newLocalDir = path.join(process.cwd(), 'axiom')
+  const hasLegacyLocal = fs.existsSync(legacyLocalDir) && isLegacyWikiDir(legacyLocalDir) && !fs.existsSync(newLocalDir)
+
+  return { gitRoot, isHomedir, existingLocalConfig, hasLegacyGlobal, legacyGlobalDir, hasLegacyLocal, legacyLocalDir, newLocalDir }
+}
+
+export function InitScreen({ onExit }: { onExit?: () => void }) {
+  const { exit } = useApp()
+  const doExit = onExit ?? exit
+  const [step, setStep] = useState<Step>(0)
+  const [scope, setScope] = useState<ConfigScope | null>(null)
+  const [context] = useState(detectContext)
+  const [provider, setProvider] = useState<ProviderId | null>(null)
+  const [apiKey, setApiKey] = useState('')
+  const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434')
+  const [ollamaError, setOllamaError] = useState('')
+  const [model, setModel] = useState('')
+  const [customModel, setCustomModel] = useState('')
+  const [wikiDir, setWikiDir] = useState(path.join(os.homedir(), 'axiom'))
+  const [rawDir, setRawDir] = useState('')
+  const [enableEmbeddings, setEnableEmbeddings] = useState(true)
+  const [preProcessMode, setPreProcessMode] = useState<PreProcessMode>('none')
+  const [preProcessStructure, setPreProcessStructure] = useState<PreProcessStructure>('flat')
+  const [preProcessConfirmBeforeIngest, setPreProcessConfirmBeforeIngest] = useState(true)
+  const [preProcessConfirmBeforeWatch, setPreProcessConfirmBeforeWatch] = useState(false)
+  const [visionEnabled, setVisionEnabled] = useState(false)
+  const [llmCallEnabled, setLlmCallEnabled] = useState(true)
+  const [migrating, setMigrating] = useState(false)
+  const [migrationDone, setMigrationDone] = useState(false)
+  const [migrationError, setMigrationError] = useState('')
+  const [log, setLog] = useState<string[]>([])
+  const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([])
+  const [ollamaStatus, setOllamaStatus] = useState<'ok' | 'no-models' | 'unreachable' | null>(null)
+  const [pulling, setPulling] = useState(false)
+  const [pullProgress, setPullProgress] = useState('')
+  const [pullError, setPullError] = useState('')
+  const [openRouterModels, setOpenRouterModels] = useState<OpenRouterModel[]>([])
+  const [openRouterStatus, setOpenRouterStatus] = useState<'ok' | 'no-models' | 'unreachable' | 'auth-error' | 'loading' | null>(null)
+
+  useEffect(() => {
+    if (scope === 'local') {
+      setWikiDir(path.join(process.cwd(), 'axiom'))
+      setRawDir(path.join(process.cwd(), 'axiom/raw'))
+    } else if (scope === 'global') {
+      setWikiDir(path.join(os.homedir(), 'axiom'))
+      setRawDir(path.join(os.homedir(), 'axiom', 'raw'))
+    }
+  }, [scope])
+
+  // Keep rawDir in sync with wikiDir while user edits it
+  useEffect(() => {
+    if (step < 6) setRawDir(path.join(expandTilde(wikiDir), 'raw'))
+  }, [wikiDir, step])
+
+  useInput((_, key) => {
+    if (step === 0 && key.return) {
+      setStep((context.hasLegacyGlobal || context.hasLegacyLocal) ? 0.5 : 1)
+    }
+    if (step === 0.5 && migrationDone && key.return) doExit()
+    if (step === 8 && key.return) doExit()
+  })
+
+  useEffect(() => {
+    if (step !== 7) return
+
+    const run = async () => {
+      try {
+        const expandedWiki = expandTilde(wikiDir)
+        const expandedRaw = expandTilde(rawDir)
+        const finalModel = model === '__custom__' ? customModel.trim() : model
+
+        const useEnvVar = !apiKey.trim() && !!process.env[PROVIDERS[provider!].keyEnv]
+        const configToSave: AxiomConfig = provider === 'ollama'
+          ? { provider: provider!, apiKey: '', model: finalModel, wikiDir: expandedWiki, rawDir: expandedRaw, ollamaBaseUrl: ollamaUrl.trim() + '/v1', obsidianCompat: true }
+          : useEnvVar
+            ? { provider: provider!, apiKey: '', apiKeyEnvName: PROVIDERS[provider!].keyEnv, model: finalModel, wikiDir: expandedWiki, rawDir: expandedRaw, obsidianCompat: true }
+            : { provider: provider!, apiKey: apiKey, model: finalModel, wikiDir: expandedWiki, rawDir: expandedRaw, obsidianCompat: true }
+
+        if (enableEmbeddings) {
+          const embProvider = (provider === 'google' || provider === 'openai' || provider === 'ollama' || provider === 'qwen' || provider === 'deepseek') ? provider : 'google'
+          const embModel = embProvider === 'google' ? 'text-embedding-004' : embProvider === 'openai' ? 'text-embedding-3-small' : embProvider === 'qwen' ? 'text-embedding-v2' : embProvider === 'deepseek' ? 'deepseek-embedding' : 'nomic-embed-text'
+          const dimensions = embProvider === 'openai' ? 1536 : embProvider === 'qwen' ? 1536 : embProvider === 'deepseek' ? 1536 : 768
+          configToSave.embeddings = {
+            provider: embProvider,
+            model: embModel,
+            dimensions
+          }
+        }
+
+        configToSave.visionEnabled = visionEnabled
+
+        configToSave.featureFlags = {
+          llmCallEnabled: llmCallEnabled,
+        }
+
+        if (preProcessMode !== 'none') {
+          configToSave.preProcess = {
+            mode: preProcessMode,
+            structure: preProcessStructure,
+            confirmBeforeIngest: preProcessConfirmBeforeIngest,
+            confirmBeforeWatch: preProcessConfirmBeforeWatch,
+          }
+        }
+
+        clearConfig(scope ?? 'global')
+
+        if (scope === 'local') {
+          const localConfigPath = path.join(process.cwd(), 'axiom/config.json')
+          setLocalConfig(configToSave, localConfigPath)
+
+          // Add axiom/ and .axiom/ to .gitignore (contains API key + generated content)
+          const gitignorePath = path.join(context.gitRoot ?? process.cwd(), '.gitignore')
+          const existing = fs.existsSync(gitignorePath) ? fs.readFileSync(gitignorePath, 'utf-8') : ''
+          const lines = existing.split('\n').map((l: string) => l.trim())
+          let additions = ''
+          if (!lines.includes('axiom/')) additions += 'axiom/\n'
+          if (!lines.includes('.axiom/')) additions += '.axiom/\n'
+          if (additions) {
+            fs.writeFileSync(gitignorePath, existing + (existing.endsWith('\n') || !existing ? '' : '\n') + additions, 'utf-8')
+            addLog('✓ Added axiom/ to .gitignore')
+          }
+        } else {
+          setConfig(configToSave)
+        }
+        addLog('✓ Config saved')
+
+        await scaffoldWiki(expandedWiki)
+        addLog('✓ Wiki structure created')
+
+        if (enableEmbeddings) {
+          addLog('⠸ Initializing semantic index...')
+          await reindexWiki(configToSave)
+          addLog('✓ Semantic index initialized')
+        }
+
+        const rawFiles = fs.existsSync(expandedRaw)
+          ? fs.readdirSync(expandedRaw).filter((f: string) => {
+              const ext = path.extname(f).toLowerCase()
+              return SUPPORTED_EXTS.includes(ext) && fs.statSync(path.join(expandedRaw, f)).isFile()
+            })
+          : []
+
+        if (rawFiles.length > 0) {
+          addLog(`⠸ Processing ${rawFiles.length} existing file(s) in raw/...`)
+          const resolvedKey = apiKey.trim() || process.env[PROVIDERS[provider!].keyEnv] || ''
+          const config = { provider: provider!, apiKey: resolvedKey, model: finalModel, wikiDir: expandedWiki, rawDir: expandedRaw }
+          const agent = createAxiomAgent(config)
+
+          for (const file of rawFiles) {
+            const filepath = path.join(expandedRaw, file)
+            addLog(`  → ingesting ${file}`)
+            try {
+              await withRetry(() => agent.generate([{ role: 'user', content: `Ingest this source file into the wiki: ${filepath}` }]))
+            } catch {
+              addLog(`  ⚠ Failed to ingest ${file}`)
+            }
+          }
+        }
+
+        addLog('✓ Done')
+        setStep(8)
+      } catch (err: unknown) {
+        addLog(`✗ Error: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
+
+    void run()
+  }, [step])
+
+  function addLog(line: string) {
+    setLog((prev) => [...prev, line])
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  if (step === 0) {
+    return (
+      <Box flexDirection="column" paddingX={2} paddingY={1}>
+        <Box flexDirection="column">
+          <Text color="cyan" bold>{'   ██╗    ██╗███████╗██╗      ██████╗ ██████╗ ███╗   ███╗'}</Text>
+          <Text color="cyan" bold>{'   ██║    ██║██╔════╝██║     ██╔════╝██╔═══██╗████╗ ████╗'}</Text>
+          <Text color="cyan" bold>{'   ██║ █╗ ██║█████╗  ██║     ██║     ██║   ██║██╔████╔██║'}</Text>
+          <Text color="cyan" bold>{'   ██║███╗██║██╔══╝  ██║     ██║     ██║   ██║██║╚██╔╝██║'}</Text>
+          <Text color="cyan" bold>{'   ╚███╔███╔╝███████╗███████╗╚██████╗╚██████╔╝██║ ╚═╝ ██║'}</Text>
+          <Text color="cyan" bold>{'    ╚══╝╚══╝ ╚══════╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝     ╚═╝'}</Text>
+        </Box>
+        <Box marginTop={1}>
+          <Text color="gray" dimColor>{'  '}The wiki that maintains itself.</Text>
+        </Box>
+        <Box marginTop={1}>
+          <Text color="gray">{'  '}v{VERSION}</Text>
+        </Box>
+        {context.existingLocalConfig ? (
+          <Box marginTop={2} flexDirection="column">
+            <Text color="yellow">  ⚠ Local wiki already configured here.</Text>
+            <Text>  Continuing will let you reconfigure it.</Text>
+          </Box>
+        ) : (
+          <Box marginTop={2}>
+            <Text>  Let's set up your wiki. This takes about 2 minutes.</Text>
+          </Box>
+        )}
+        <Box marginTop={1}>
+          <Text color="gray">  Press <Text color="white">Enter</Text> to {context.existingLocalConfig ? 'reconfigure' : 'continue'} →</Text>
+        </Box>
+      </Box>
+    )
+  }
+
+  if (step === 0.5) {
+    const { hasLegacyGlobal, legacyGlobalDir, hasLegacyLocal, legacyLocalDir, newLocalDir } = context
+    const newGlobalDir = path.join(os.homedir(), 'axiom')
+
+    const doMigrate = async () => {
+      setMigrating(true)
+      setMigrationError('')
+      try {
+        if (hasLegacyGlobal) {
+          fs.renameSync(legacyGlobalDir, newGlobalDir)
+          setConfig({ wikiDir: newGlobalDir, rawDir: path.join(newGlobalDir, 'raw') })
+        }
+        if (hasLegacyLocal) {
+          fs.renameSync(legacyLocalDir, newLocalDir)
+          clearLocalConfigCache()
+          // Update config.json paths inside the moved directory
+          const configPath = path.join(newLocalDir, 'config.json')
+          if (fs.existsSync(configPath)) {
+            const cfg = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+            cfg.wikiDir = newLocalDir
+            cfg.rawDir = path.join(newLocalDir, 'raw')
+            fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2), 'utf-8')
+          }
+          // Update .gitignore: add axiom/ if not present
+          const gitignorePath = path.join(context.gitRoot ?? process.cwd(), '.gitignore')
+          if (fs.existsSync(gitignorePath)) {
+            let content = fs.readFileSync(gitignorePath, 'utf-8')
+            if (!content.split('\n').some((l: string) => l.trim() === 'axiom/')) {
+              content = content.replace(/^\.axiom\/?$/m, 'axiom/')
+              // If regex didn't match (different format), append
+              if (!content.split('\n').some((l: string) => l.trim() === 'axiom/')) {
+                content += (content.endsWith('\n') ? '' : '\n') + 'axiom/\n'
+              }
+              fs.writeFileSync(gitignorePath, content, 'utf-8')
+            }
+          }
+        }
+        setMigrationDone(true)
+      } catch (err) {
+        setMigrationError(err instanceof Error ? err.message : String(err))
+      }
+      setMigrating(false)
+    }
+
+    if (migrationDone) {
+      return (
+        <Box flexDirection="column" padding={1}>
+          <Text bold color="green">✓ Migrated successfully!</Text>
+          {hasLegacyGlobal && (
+            <Box marginTop={1}>
+              <Text><Text color="gray">{legacyGlobalDir}</Text> → <Text color="cyan">{newGlobalDir}</Text></Text>
+            </Box>
+          )}
+          {hasLegacyLocal && (
+            <Box marginTop={1}>
+              <Text><Text color="gray">{legacyLocalDir}</Text> → <Text color="cyan">{newLocalDir}</Text></Text>
+            </Box>
+          )}
+          <Box marginTop={1}>
+            <Text color="gray">Press <Text color="white">Enter</Text> to exit</Text>
+          </Box>
+        </Box>
+      )
+    }
+
+    const items = [
+      { label: 'Migrate — rename to new directory layout', value: 'migrate' },
+      { label: 'Skip — set up a fresh wiki instead', value: 'skip' },
+    ]
+
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text bold color="yellow">Legacy wiki detected</Text>
+        <Box marginTop={1} flexDirection="column">
+          <Text color="gray">Since v0.5.0, wiki directories have been renamed:</Text>
+          {hasLegacyGlobal && (
+            <Text>  <Text color="gray">{legacyGlobalDir}</Text> → <Text color="cyan">{newGlobalDir}</Text></Text>
+          )}
+          {hasLegacyLocal && (
+            <Text>  <Text color="gray">{legacyLocalDir}</Text> → <Text color="cyan">{newLocalDir}</Text></Text>
+          )}
+        </Box>
+        {migrating ? (
+          <Box marginTop={1}>
+            <Text>⠸ Migrating...</Text>
+          </Box>
+        ) : (
+          <Box marginTop={1}>
+            <SelectInput
+              items={items}
+              onSelect={async (item) => {
+                if (item.value === 'migrate') {
+                  await doMigrate()
+                } else {
+                  setStep(1)
+                }
+              }}
+            />
+          </Box>
+        )}
+        {migrationError && (
+          <Box marginTop={1} flexDirection="column">
+            <Text color="red">✗ Migration failed: {migrationError}</Text>
+            {hasLegacyGlobal && <Text color="gray">  Manual: mv ~/my-wiki ~/axiom</Text>}
+            {hasLegacyLocal && <Text color="gray">  Manual: mv .axiom axiom</Text>}
+          </Box>
+        )}
+      </Box>
+    )
+  }
+
+  if (step === 1) {
+    const { gitRoot, isHomedir, existingLocalConfig } = context
+
+    // In home directory, only offer global wiki
+    if (isHomedir) {
+      const items = [
+        { label: `Global — personal wiki in ${os.homedir()}/axiom/`, value: 'global' },
+      ]
+      return (
+        <Box flexDirection="column" padding={1}>
+          <Text bold>Where should this wiki live?</Text>
+          <Box marginTop={1}>
+            <Text color="gray">You're in your home directory.</Text>
+          </Box>
+          <Box marginTop={1}>
+            <SelectInput
+              items={items}
+              onSelect={(item) => {
+                setScope(item.value as ConfigScope)
+                setStep(2)
+              }}
+            />
+          </Box>
+        </Box>
+      )
+    }
+
+    let contextMessage: string
+    if (gitRoot) {
+      contextMessage = `I see you're in a git repo at ${gitRoot}.`
+    } else {
+      contextMessage = `You're in ${process.cwd()}.`
+    }
+
+    const items = [
+      { label: `Local  — project wiki in ${process.cwd()}/axiom/`, value: 'local' },
+      { label: `Global — personal wiki in ${os.homedir()}/axiom/`, value: 'global' },
+    ]
+
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text bold>Where should this wiki live?</Text>
+        <Box marginTop={1}>
+          <Text color="gray">{contextMessage}</Text>
+        </Box>
+        <Box marginTop={1}>
+          <SelectInput
+            items={items}
+            onSelect={(item) => {
+              setScope(item.value as ConfigScope)
+              setStep(2)
+            }}
+          />
+        </Box>
+        {existingLocalConfig && (
+          <Box marginTop={1}>
+            <Text color="yellow">⚠ Existing local config found at {existingLocalConfig} — selecting Local will overwrite it.</Text>
+          </Box>
+        )}
+      </Box>
+    )
+  }
+
+  if (step === 2) {
+    const items = listProviders().map((p) => ({ label: p.label, value: p.id }))
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text bold>Choose your LLM provider:</Text>
+        <Box marginTop={1}>
+          <SelectInput
+            items={items}
+            onSelect={(item) => {
+              setProvider(item.value as ProviderId)
+              setModel(PROVIDERS[item.value as ProviderId].models.find((m) => m.recommended)?.id ?? PROVIDERS[item.value as ProviderId].models[0]!.id)
+              setStep(3)
+            }}
+          />
+        </Box>
+      </Box>
+    )
+  }
+
+  if (step === 3) {
+    const prov = PROVIDERS[provider!]
+
+    if (provider === 'ollama') {
+      return (
+        <Box flexDirection="column" padding={1}>
+          <Text bold>Ollama base URL:</Text>
+          <Text color="gray">(Press Enter for default: http://localhost:11434)</Text>
+          <Box marginTop={1}>
+            <Text>{'> '}</Text>
+            <TextInput
+              value={ollamaUrl}
+              onChange={(v) => { setOllamaUrl(v); setOllamaError('') }}
+              onSubmit={async (val) => {
+                const url = (val.trim() || 'http://localhost:11434').replace(/\/+$/, '')
+                setOllamaUrl(url)
+                setOllamaError('')
+                const result = await fetchOllamaModels(url)
+                setOllamaStatus(result.status)
+                if (result.status === 'unreachable') {
+                  setOllamaError(`Could not connect to Ollama at ${url}\nIs Ollama installed? Visit https://ollama.com\nIs it running? Try: ollama serve`)
+                  return
+                }
+                setOllamaModels(result.models)
+                setStep(4)
+              }}
+            />
+          </Box>
+          {ollamaError && (
+            <Box marginTop={1} flexDirection="column">
+              <Text color="red">✗ {ollamaError}</Text>
+              <Text color="gray">Press Enter to retry, or go back with Ctrl+C.</Text>
+            </Box>
+          )}
+        </Box>
+      )
+    }
+
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text bold>{prov.keyLabel}</Text>
+        <Text color="gray">(from {prov.keyUrl})</Text>
+        <Box marginTop={1}>
+          {process.env[prov.keyEnv] ? (
+            <Text color="green">✓ {prov.keyEnv} is set in environment</Text>
+          ) : (
+            <Text color="yellow">⚠ {prov.keyEnv} is not set</Text>
+          )}
+        </Box>
+        <Box marginTop={1}>
+          <Text>{'> '}</Text>
+          <TextInput
+            value={apiKey}
+            onChange={setApiKey}
+            mask="•"
+            placeholder={process.env[prov.keyEnv] ? '(Press Enter to use environment variable)' : ''}
+            onSubmit={async (val) => {
+              if (!val.trim() && !process.env[prov.keyEnv]) return
+              const keyToUse = val.trim() || process.env[prov.keyEnv] || ''
+              if (provider === 'openrouter') {
+                setOpenRouterStatus('loading')
+                const result = await fetchOpenRouterModels(keyToUse)
+                setOpenRouterStatus(result.status)
+                setOpenRouterModels(result.models)
+              }
+              setStep(4)
+            }}
+          />
+        </Box>
+        <Box marginTop={1}>
+          <Text color="gray">Enter API key, or press Enter to use {prov.keyEnv}</Text>
+        </Box>
+      </Box>
+    )
+  }
+
+  if (step === 4) {
+    // Helper: pick or pull an Ollama model, then advance
+    const selectOllamaModel = async (modelName: string) => {
+      // Check if model is already local
+      const isLocal = ollamaModels.some((m) => m.name === modelName || m.name === `${modelName}:latest`)
+      if (isLocal) {
+        setModel(modelName)
+        setStep(5)
+        return
+      }
+      // Pull the model
+      setPulling(true)
+      setPullProgress(`Pulling ${modelName}...`)
+      setPullError('')
+      const result = await pullOllamaModel(ollamaUrl, modelName, (p) => {
+        setPullProgress(formatPullProgress(p))
+      })
+      setPulling(false)
+      if (!result.ok) {
+        setPullError(`Failed to pull ${modelName}: ${result.error}`)
+        return
+      }
+      // Refresh model list and advance
+      const refreshed = await fetchOllamaModels(ollamaUrl)
+      setOllamaStatus(refreshed.status)
+      setOllamaModels(refreshed.models)
+      setModel(modelName)
+      setStep(5)
+    }
+
+    // Show pulling progress
+    if (pulling) {
+      return (
+        <Box flexDirection="column" padding={1}>
+          <Text bold>Pulling model...</Text>
+          <Box marginTop={1}>
+            <Text>{pullProgress}</Text>
+          </Box>
+        </Box>
+      )
+    }
+
+    // Custom model name input
+    if (model === '__custom__') {
+      return (
+        <Box flexDirection="column" padding={1}>
+          <Text bold>Enter model name:</Text>
+          {provider === 'ollama' && (
+            <Text color="gray">The model will be pulled automatically if not already available.</Text>
+          )}
+          {provider === 'openrouter' && (
+            <Text color="gray">Enter the model ID (e.g. anthropic/claude-sonnet-4). Browse: https://openrouter.ai/models</Text>
+          )}
+          <Box marginTop={1}>
+            <Text>{'> '}</Text>
+            <TextInput
+              value={customModel}
+              onChange={setCustomModel}
+              onSubmit={async (val) => {
+                if (!val.trim()) return
+                if (provider === 'ollama') {
+                  await selectOllamaModel(val.trim())
+                } else {
+                  setStep(5)
+                }
+              }}
+            />
+          </Box>
+          {pullError && (
+            <Box marginTop={1}>
+              <Text color="red">✗ {pullError}</Text>
+            </Box>
+          )}
+        </Box>
+      )
+    }
+
+    // Ollama: show locally available models or suggestions
+    if (provider === 'ollama') {
+      if (ollamaStatus === 'no-models') {
+        const suggestedItems = OLLAMA_SUGGESTED_MODELS.map((s) => ({
+          label: `${s.name}  ${s.desc}`,
+          value: s.name,
+        }))
+        const items = [
+          ...suggestedItems,
+          { label: '[ Enter custom model name ]', value: '__custom__' },
+        ]
+        return (
+          <Box flexDirection="column" padding={1}>
+            <Text bold color="yellow">No models found on your Ollama instance.</Text>
+            <Text>Select a model to pull it automatically:</Text>
+            <Box marginTop={1}>
+              <SelectInput
+                items={items}
+                onSelect={async (item) => {
+                  if (item.value === '__custom__') { setModel('__custom__'); return }
+                  await selectOllamaModel(item.value)
+                }}
+              />
+            </Box>
+            {pullError && (
+              <Box marginTop={1}>
+                <Text color="red">✗ {pullError}</Text>
+              </Box>
+            )}
+          </Box>
+        )
+      }
+
+      // Has local models
+      const localModels = [
+        ...ollamaModelsToSelectItems(ollamaModels),
+        { label: '[ Enter custom model name ]', value: '__custom__' },
+      ]
+      return (
+        <Box flexDirection="column" padding={1}>
+          <Text bold>Choose a model <Text color="gray">(locally available)</Text>:</Text>
+          <Box marginTop={1}>
+            <SelectInput
+              items={localModels}
+              onSelect={(item) => {
+                setModel(item.value)
+                if (item.value !== '__custom__') setStep(5)
+              }}
+            />
+          </Box>
+        </Box>
+      )
+    }
+
+    // OpenRouter: show fetched models or loading/error state
+    if (provider === 'openrouter') {
+      if (openRouterStatus === 'loading') {
+        return (
+          <Box flexDirection="column" padding={1}>
+            <Text bold>Fetching available models from OpenRouter...</Text>
+          </Box>
+        )
+      }
+      if (openRouterStatus === 'auth-error') {
+        return (
+          <Box flexDirection="column" padding={1}>
+            <Text bold color="red">Invalid API key.</Text>
+            <Text color="gray">Check your key at https://openrouter.ai/keys</Text>
+            <Text color="gray">Press Ctrl+C to go back.</Text>
+          </Box>
+        )
+      }
+      if (openRouterStatus === 'unreachable' || openRouterStatus === 'no-models') {
+        // Fallback to manual entry
+        return (
+          <Box flexDirection="column" padding={1}>
+            <Text bold color="yellow">Could not fetch models from OpenRouter.</Text>
+            <Text>Enter a model ID manually (e.g. anthropic/claude-sonnet-4):</Text>
+            <Box marginTop={1}>
+              <Text>{'> '}</Text>
+              <TextInput
+                value={customModel}
+                onChange={setCustomModel}
+                onSubmit={(val) => { if (val.trim()) { setModel(val.trim()); setStep(5) } }}
+              />
+            </Box>
+            <Box marginTop={1}>
+              <Text color="gray">Browse models at https://openrouter.ai/models</Text>
+            </Box>
+          </Box>
+        )
+      }
+      // Show popular picks + custom option
+      const popular = pickPopularModels(openRouterModels)
+      const items = [
+        ...popular.map((m) => ({ label: formatModelLabel(m), value: m.id })),
+        { label: `[ Browse all ${openRouterModels.length} models — enter ID ]`, value: '__custom__' },
+      ]
+      return (
+        <Box flexDirection="column" padding={1}>
+          <Text bold>Choose a model <Text color="gray">({openRouterModels.length} available)</Text>:</Text>
+          <Box marginTop={1}>
+            <SelectInput
+              items={items}
+              onSelect={(item) => {
+                if (item.value === '__custom__') { setModel('__custom__'); return }
+                setModel(item.value)
+                setStep(5)
+              }}
+            />
+          </Box>
+        </Box>
+      )
+    }
+
+    // Non-Ollama/non-OpenRouter providers: hardcoded list
+    const models = [
+      ...PROVIDERS[provider!].models.map((m) => ({ label: `${m.label}  ${m.desc}`, value: m.id })),
+      { label: '[ Enter custom model name ]', value: '__custom__' },
+    ]
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text bold>Choose a model:</Text>
+        <Box marginTop={1}>
+          <SelectInput
+            items={models}
+            onSelect={(item) => {
+              setModel(item.value)
+              if (item.value !== '__custom__') setStep(5)
+            }}
+          />
+        </Box>
+      </Box>
+    )
+  }
+
+  if (step === 5) {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text bold>Wiki directory:</Text>
+        <Box marginTop={1}>
+          <Text>{'> '}</Text>
+          <TextInput
+            value={wikiDir}
+            onChange={setWikiDir}
+            onSubmit={(val) => {
+              if (val.trim()) {
+                setWikiDir(val.trim())
+                setStep(6)
+              }
+            }}
+          />
+        </Box>
+        <Box marginTop={1}>
+          <Text color="gray">This is where your wiki pages will be stored.</Text>
+        </Box>
+      </Box>
+    )
+  }
+
+  if (step === 6) {
+    const defaultRaw = path.join(expandTilde(wikiDir), 'raw')
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text bold>Raw sources folder:</Text>
+        <Box marginTop={1}>
+          <Text>{'> '}</Text>
+          <TextInput
+            value={rawDir || defaultRaw}
+            onChange={setRawDir}
+            onSubmit={(val) => {
+              setRawDir(val.trim() || defaultRaw)
+              setStep(6.5)
+            }}
+          />
+        </Box>
+        <Box marginTop={1}>
+          <Text color="gray">Drop your source files here (PDFs, markdown, etc.)</Text>
+        </Box>
+      </Box>
+    )
+  }
+
+  if (step === 6.5) {
+    const items = [
+      { label: 'Yes (Recommended for better AI planning)', value: 'yes' },
+      { label: 'No (Keyword search only)', value: 'no' },
+    ]
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text bold>Enable Semantic Search?</Text>
+        <Box marginTop={1}>
+          <Text color="gray">This allows your AI agent to find relevant context even if keywords don't match exactly.</Text>
+        </Box>
+        <Box marginTop={1}>
+          <SelectInput
+            items={items}
+            onSelect={(item) => {
+              setEnableEmbeddings(item.value === 'yes')
+              setStep(6.6)
+            }}
+          />
+        </Box>
+      </Box>
+    )
+  }
+
+  if (step === 6.6) {
+    const items = [
+      { label: 'None (Process entire document as one)', value: 'none' },
+      { label: 'By Chapter (Split by Markdown headers)', value: 'by-chapter' },
+    ]
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text bold>Pre-process Input Text?</Text>
+        <Box marginTop={1}>
+          <Text color="gray">Split long documents into chunks for more manageable processing.</Text>
+        </Box>
+        <Box marginTop={1}>
+          <SelectInput
+          items={items}
+          onSelect={(item) => {
+            setPreProcessMode(item.value as PreProcessMode)
+            setStep(6.65)
+          }}
+        />
+        </Box>
+      </Box>
+    )
+  }
+
+  if (step === 6.65) {
+    const items = [
+      { label: 'No - Skip images (use a text-only model)', value: 'no' },
+      { label: 'Yes - Process images with vision model', value: 'yes' },
+    ]
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text bold>Enable Vision/Image Processing?</Text>
+        <Box marginTop={1}>
+          <Text color="gray">If enabled, images will be sent to the LLM for analysis.</Text>
+        </Box>
+        <Box marginTop={1}>
+          <Text color="gray">Requires a vision-capable model (e.g. Claude, GPT-4V, Gemini Pro).</Text>
+        </Box>
+        <Box marginTop={1}>
+          <SelectInput
+            items={items}
+            onSelect={(item) => {
+              setVisionEnabled(item.value === 'yes')
+              setStep(6.7)
+            }}
+          />
+        </Box>
+      </Box>
+    )
+  }
+
+  if (step === 6.7) {
+    const items = [
+      { label: 'Flat (All chunks in single folder)', value: 'flat' },
+      { label: 'Preserve (Keep heading hierarchy as folders)', value: 'preserve' },
+    ]
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text bold>Chunk Structure?</Text>
+        <Box marginTop={1}>
+          <Text color="gray">How should the split chunks be organized?</Text>
+        </Box>
+        <Box marginTop={1}>
+          <SelectInput
+            items={items}
+            onSelect={(item) => {
+              setPreProcessStructure(item.value as PreProcessStructure)
+              setStep(6.8)
+            }}
+          />
+        </Box>
+      </Box>
+    )
+  }
+
+  if (step === 6.8) {
+    const items = [
+      { label: 'Yes - Require confirmation before LLM processing', value: 'yes' },
+      { label: 'No - Skip confirmation, process immediately', value: 'no' },
+    ]
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text bold>Pre-Process Confirmation for ingest?</Text>
+        <Box marginTop={1} flexDirection="column">
+          <Text color="gray">Should ingest command ask for confirmation after splitting?</Text>
+        </Box>
+        <Box marginTop={1}>
+          <SelectInput
+            items={items}
+            onSelect={(item) => {
+              setPreProcessConfirmBeforeIngest(item.value === 'yes')
+              setStep(6.9)
+            }}
+          />
+        </Box>
+      </Box>
+    )
+  }
+
+  if (step === 6.9) {
+    const items = [
+      { label: 'Yes - Require confirmation before LLM processing', value: 'yes' },
+      { label: 'No - Skip confirmation, process immediately', value: 'no' },
+    ]
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text bold>Pre-Process Confirmation for watch?</Text>
+        <Box marginTop={1} flexDirection="column">
+          <Text color="gray">Should watch command ask for confirmation after splitting?</Text>
+        </Box>
+        <Box marginTop={1}>
+          <SelectInput
+            items={items}
+            onSelect={(item) => {
+              setPreProcessConfirmBeforeWatch(item.value === 'yes')
+              setStep(6.95)
+            }}
+          />
+        </Box>
+      </Box>
+    )
+  }
+
+  if (step === 6.95) {
+    const items = [
+      { label: 'Yes (Recommended - Enable LLM calls)', value: 'yes' },
+      { label: 'No (Debug mode - Skip LLM calls)', value: 'no' },
+    ]
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text bold>Enable LLM Calls?</Text>
+        <Box marginTop={1} flexDirection="column">
+          <Text color="gray">When disabled, watch will skip LLM calls for debugging preprocessing/chunking.</Text>
+        </Box>
+        <Box marginTop={1}>
+          <SelectInput
+            items={items}
+            onSelect={(item) => {
+              setLlmCallEnabled(item.value === 'yes')
+              setStep(7)
+            }}
+          />
+        </Box>
+      </Box>
+    )
+  }
+
+  if (step === 7) {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Text bold>Setting up your wiki...</Text>
+        <Box marginTop={1} flexDirection="column">
+          {log.map((line, i) => (
+            <Text key={i} color={line.startsWith('✓') ? 'green' : line.startsWith('✗') ? 'red' : line.startsWith('⚠') ? 'yellow' : 'white'}>
+              {line}
+            </Text>
+          ))}
+        </Box>
+      </Box>
+    )
+  }
+
+  // step === 8: success
+  const expandedWiki = expandTilde(wikiDir)
+  const expandedRaw = expandTilde(rawDir)
+  const mcpConfig = JSON.stringify({ 'axiom-wiki': { command: 'axiom-wiki', args: ['mcp'] } }, null, 2)
+
+  return (
+    <Box flexDirection="column" padding={1}>
+      <Text bold color="green">
+        {scope === 'local' ? '✓ Local project wiki is ready!' : '✓ Axiom Wiki is ready!'}
+      </Text>
+      <Box marginTop={1} flexDirection="column">
+        <Text>Your wiki:    <Text color="cyan">{expandedWiki}/wiki/</Text></Text>
+        <Text>Raw sources:  <Text color="cyan">{expandedRaw}/</Text></Text>
+        {scope === 'local' && (
+          <Text color="gray">Config: <Text color="cyan">{process.cwd()}/axiom/config.json</Text></Text>
+        )}
+      </Box>
+      <Box marginTop={1} flexDirection="column">
+        <Text bold>Add to Claude Code MCP config (.claude/mcp_settings.json):</Text>
+        <Box marginTop={1} borderStyle="single" borderColor="gray" paddingX={1}>
+          <Text color="yellow">{mcpConfig}</Text>
+        </Box>
+      </Box>
+      <Box marginTop={1}>
+        <Text color="gray">Run <Text color="cyan">axiom-wiki --help</Text> to see all commands.</Text>
+      </Box>
+      {scope === 'local' && (
+        <Box marginTop={1}>
+          <Text color="gray">Run <Text color="cyan">axiom-wiki</Text> from this directory to use this wiki.</Text>
+        </Box>
+      )}
+      <Box marginTop={1}>
+        <Text color="gray">Press <Text color="white">Enter</Text> to exit</Text>
+      </Box>
+    </Box>
+  )
+}

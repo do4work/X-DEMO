@@ -1,0 +1,200 @@
+import { ENDPOINTS, type EndpointId } from './endpoints.js'
+
+export type ProviderId = EndpointId
+
+export interface ModelDef {
+  id: string
+  label: string
+  desc: string
+  recommended?: boolean
+  /** USD per 1M tokens */
+  pricing?: { input: number; output: number }
+  /** Context window size in tokens */
+  contextWindow?: number
+}
+
+export interface ProviderDef {
+  id: ProviderId
+  label: string
+  keyLabel: string
+  keyEnv: string
+  keyUrl: string
+  requiresApiKey: boolean
+  models: ModelDef[]
+}
+
+export const PROVIDERS: Record<ProviderId, ProviderDef> = {
+  google: {
+    id: 'google',
+    label: 'Google Gemini',
+    keyLabel: 'Gemini API Key',
+    keyEnv: 'GOOGLE_GENERATIVE_AI_API_KEY',
+    keyUrl: 'https://aistudio.google.com/app/apikey',
+    requiresApiKey: true,
+    models: [
+      { id: 'gemini-3-flash-preview',      label: 'Gemini 3 Flash Preview',      desc: 'Fast, frontier intelligence with search and grounding', recommended: true, pricing: { input: 0.50, output: 3.00 }, contextWindow: 1_000_000 },
+      { id: 'gemini-3.1-pro-preview',      label: 'Gemini 3.1 Pro Preview',      desc: 'SOTA reasoning, multimodal, deep coding capabilities', pricing: { input: 2.00, output: 12.00 }, contextWindow: 1_000_000 },
+      { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite',     desc: 'Most cost-efficient, optimized for high-volume agentic tasks', pricing: { input: 0.25, output: 1.50 }, contextWindow: 1_000_000 },
+      { id: 'gemini-2.5-pro',              label: 'Gemini 2.5 Pro',              desc: 'Advanced reasoning, 1M context, coding and complex tasks', pricing: { input: 1.25, output: 10.00 }, contextWindow: 1_000_000 },
+      { id: 'gemini-2.0-flash',            label: 'Gemini 2.0 Flash',            desc: 'Second-gen multimodal, great performance across all tasks', pricing: { input: 0.10, output: 0.40 }, contextWindow: 1_000_000 },
+      { id: 'gemma-4-26b-a4b-it',          label: 'Gemma 4 26B (MoE)',           desc: 'Open-weight MoE, activates 4B params per inference, free tier', contextWindow: 128_000 },
+      { id: 'gemma-4-31b-it',              label: 'Gemma 4 31B',                 desc: 'Open-weight dense model, 256K context, data center quality, free tier', contextWindow: 256_000 },
+    ],
+  },
+  openai: {
+    id: 'openai',
+    label: 'OpenAI',
+    keyLabel: 'OpenAI API Key',
+    keyEnv: 'OPENAI_API_KEY',
+    keyUrl: 'https://platform.openai.com/api-keys',
+    requiresApiKey: true,
+    models: [
+      { id: 'gpt-5.4',      label: 'GPT-5.4',      desc: 'Flagship — complex reasoning and coding', pricing: { input: 15.00, output: 60.00 }, contextWindow: 128_000 },
+      { id: 'gpt-5.4-mini', label: 'GPT-5.4 Mini', desc: 'Fast and affordable', recommended: true, pricing: { input: 0.40, output: 1.60 }, contextWindow: 128_000 },
+      { id: 'gpt-5.4-nano', label: 'GPT-5.4 Nano', desc: 'Ultra-fast, lightweight', pricing: { input: 0.10, output: 0.40 }, contextWindow: 128_000 },
+    ],
+  },
+  anthropic: {
+    id: 'anthropic',
+    label: 'Anthropic',
+    keyLabel: 'Anthropic API Key',
+    keyEnv: 'ANTHROPIC_API_KEY',
+    keyUrl: 'https://console.anthropic.com/settings/keys',
+    requiresApiKey: true,
+    models: [
+      { id: 'claude-opus-4-6',   label: 'Claude Opus 4.6',   desc: 'Most capable — best reasoning and coding', pricing: { input: 15.00, output: 75.00 }, contextWindow: 200_000 },
+      { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', desc: 'Balanced speed and quality', recommended: true, pricing: { input: 3.00, output: 15.00 }, contextWindow: 200_000 },
+      { id: 'claude-haiku-4-5',  label: 'Claude Haiku 4.5',  desc: 'Fast and cost-efficient', pricing: { input: 0.80, output: 4.00 }, contextWindow: 200_000 },
+    ],
+  },
+  openrouter: {
+    id: 'openrouter',
+    label: 'OpenRouter',
+    keyLabel: 'OpenRouter API Key',
+    keyEnv: 'OPENROUTER_API_KEY',
+    keyUrl: 'https://openrouter.ai/keys',
+    requiresApiKey: true,
+    models: [
+      // Models are fetched dynamically from the API during setup.
+      // This list is only used as a fallback if the API is unreachable.
+      { id: 'openrouter/auto', label: 'Auto (best for prompt)', desc: 'Automatically selects the best model', recommended: true },
+    ],
+  },
+  deepseek: {
+    id: 'deepseek',
+    label: 'DeepSeek',
+    keyLabel: 'DeepSeek API Key',
+    keyEnv: 'DEEPSEEK_API_KEY',
+    keyUrl: 'https://platform.deepseek.com/api_keys',
+    requiresApiKey: true,
+    models: [
+      { id: 'deepseek-chat',     label: 'DeepSeek V3',  desc: 'General purpose, fast and cheap', pricing: { input: 0.27, output: 1.10 }, contextWindow: 64_000 },
+      { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', desc: 'Fast and cost-effective, great for high-volume agentic tasks', recommended: true, pricing: { input: 0.14, output: 0.28 }, contextWindow: 1_000_000 },
+      { id: 'deepseek-v4-pro',   label: 'DeepSeek V4 Pro',   desc: 'Enhanced reasoning, optimized for complex tasks and professional fields', pricing: { input: 1.74, output: 3.48 }, contextWindow: 1_000_000 },
+      { id: 'deepseek-reasoner', label: 'DeepSeek R1',  desc: 'Chain-of-thought reasoning', pricing: { input: 0.55, output: 2.19 }, contextWindow: 64_000 },
+    ],
+  },
+  groq: {
+    id: 'groq',
+    label: 'Groq',
+    keyLabel: 'Groq API Key',
+    keyEnv: 'GROQ_API_KEY',
+    keyUrl: 'https://console.groq.com/keys',
+    requiresApiKey: true,
+    models: [
+      { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B',  desc: 'Fast Llama inference', recommended: true, pricing: { input: 0.59, output: 0.79 }, contextWindow: 128_000 },
+      { id: 'gemma2-9b-it',            label: 'Gemma 2 9B',      desc: 'Fast and lightweight', pricing: { input: 0.20, output: 0.20 }, contextWindow: 8_192 },
+      { id: 'llama-3.1-8b-instant',    label: 'Llama 3.1 8B',    desc: 'Ultra-fast small model', pricing: { input: 0.05, output: 0.08 }, contextWindow: 128_000 },
+    ],
+  },
+  mistral: {
+    id: 'mistral',
+    label: 'Mistral AI',
+    keyLabel: 'Mistral API Key',
+    keyEnv: 'MISTRAL_API_KEY',
+    keyUrl: 'https://console.mistral.ai/api-keys',
+    requiresApiKey: true,
+    models: [
+      { id: 'mistral-large-latest',  label: 'Mistral Large',  desc: 'Flagship reasoning model', recommended: true, pricing: { input: 2.00, output: 6.00 }, contextWindow: 128_000 },
+      { id: 'mistral-medium-latest', label: 'Mistral Medium', desc: 'Balanced speed and quality', pricing: { input: 0.40, output: 2.00 }, contextWindow: 128_000 },
+      { id: 'mistral-small-latest',  label: 'Mistral Small',  desc: 'Fast and cost-efficient', pricing: { input: 0.10, output: 0.30 }, contextWindow: 128_000 },
+      { id: 'codestral-latest',      label: 'Codestral',      desc: 'Code-specialized model', pricing: { input: 0.30, output: 0.90 }, contextWindow: 256_000 },
+    ],
+  },
+  ollama: {
+    id: 'ollama',
+    label: 'Ollama (local)',
+    keyLabel: 'Ollama Base URL',
+    keyEnv: 'OLLAMA_BASE_URL',
+    keyUrl: 'https://ollama.com',
+    requiresApiKey: false,
+    models: [
+      { id: 'llama3.2',  label: 'Llama 3.2 (3B)',  desc: 'Fast and lightweight', recommended: true, contextWindow: 128_000 },
+      { id: 'llama3.1',  label: 'Llama 3.1 (8B)',  desc: 'Strong general-purpose model', contextWindow: 128_000 },
+      { id: 'mistral',   label: 'Mistral 7B',       desc: 'Great instruction following', contextWindow: 32_000 },
+      { id: 'qwen2.5',   label: 'Qwen 2.5 (7B)',    desc: 'Multilingual, strong reasoning', contextWindow: 128_000 },
+    ],
+  },
+  qwen: {
+    id: 'qwen',
+    label: 'Qwen (Alibaba)',
+    keyLabel: 'DashScope API Key',
+    keyEnv: 'DASHSCOPE_API_KEY',
+    keyUrl: 'https://dashscope.console.aliyun.com/api-key',
+    requiresApiKey: true,
+    models: [
+      { id: 'qwen-plus',     label: 'Qwen Plus',     desc: 'Enhanced reasoning and instruction following', recommended: true, pricing: { input: 0.60, output: 1.20 }, contextWindow: 131_072 },
+      { id: 'qwen-max',      label: 'Qwen Max',      desc: 'Most capable, complex reasoning and coding', pricing: { input: 4.00, output: 12.00 }, contextWindow: 131_072 },
+      { id: 'qwen-turbo',    label: 'Qwen Turbo',    desc: 'Fast response, cost-efficient', pricing: { input: 0.30, output: 0.60 }, contextWindow: 131_072 },
+      { id: 'qwen-coder-plus', label: 'Qwen Coder Plus', desc: 'Specialized for code generation', pricing: { input: 1.20, output: 2.40 }, contextWindow: 131_072 },
+    ],
+  },
+  custom: {
+    id: 'custom',
+    label: 'Custom (自部署)',
+    keyLabel: 'API Key',
+    keyEnv: 'CUSTOM_API_KEY',
+    keyUrl: '',
+    requiresApiKey: false,
+    models: [
+      { id: 'custom-model', label: 'Custom Model', desc: '任意 OpenAI 兼容的自定义模型', recommended: true },
+    ],
+  },
+}
+
+export function getProvider(id: ProviderId): ProviderDef {
+  return PROVIDERS[id]
+}
+
+export function getModel(providerId: ProviderId, modelId: string): ModelDef | undefined {
+  return PROVIDERS[providerId].models.find((m) => m.id === modelId)
+}
+
+export function getDefaultModel(providerId: ProviderId): ModelDef {
+  const models = PROVIDERS[providerId].models
+  return models.find((m) => m.recommended) ?? models[0]
+}
+
+export function listProviders(): ProviderDef[] {
+  return Object.values(PROVIDERS)
+}
+
+const DEFAULT_CONTEXT_WINDOW = 128_000
+const DEFAULT_OLLAMA_CONTEXT_WINDOW = 65_536
+
+export function getContextWindow(providerId: ProviderId, modelId: string): number {
+  const model = getModel(providerId, modelId)
+  if (providerId === 'ollama') return model?.contextWindow ?? DEFAULT_OLLAMA_CONTEXT_WINDOW
+  return model?.contextWindow ?? DEFAULT_CONTEXT_WINDOW
+}
+
+export function getOllamaNumCtx(modelId: string, configOverride?: number): number {
+  if (configOverride !== undefined) return configOverride
+  const model = getModel('ollama', modelId)
+  return model?.contextWindow ?? DEFAULT_OLLAMA_CONTEXT_WINDOW
+}
+
+/** Rough token estimate from text length. ~3.5 chars per token on average. */
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 3.5)
+}
