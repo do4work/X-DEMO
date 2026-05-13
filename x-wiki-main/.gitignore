@@ -1,0 +1,7 @@
+_planning/
+node_modules/
+dist/
+.env
+*.local
+axiom/
+.axiom/
