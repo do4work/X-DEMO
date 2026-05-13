@@ -2,7 +2,7 @@ import { Agent } from '@mastra/core/agent'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
 import { createAnthropic } from '@ai-sdk/anthropic'
-import { buildSystemPrompt, buildAutowikiSystemPrompt, buildSyncSystemPrompt } from './prompts.js'
+import { buildSystemPrompt, buildAutowikiSystemPrompt, buildSyncSystemPrompt, buildTwoPhaseSystemPrompt } from './prompts.js'
 import { createAxiomTools } from './tools.js'
 import { createCodebaseTools } from './codebase-tools.js'
 import type { AxiomConfig } from '../config/index.js'
@@ -18,7 +18,7 @@ export function createAxiomAgent(config: AxiomConfig) {
   const agent = new Agent({
     id: 'axiom',
     name: 'axiom',
-    instructions: buildSystemPrompt({ obsidianCompat: config.obsidianCompat }),
+    instructions: buildTwoPhaseSystemPrompt({ obsidianCompat: config.obsidianCompat, domainMode: true }),
     model,
     tools,
   })
