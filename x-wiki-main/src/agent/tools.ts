@@ -14,6 +14,7 @@ import { applyTier1Updates, type FileChange } from '../core/wiki-sync-lite.js'
 import { applyTier2Updates } from '../core/incremental-sync.js'
 import { indexWikiPage, persistOrama } from '../core/indexing.js'
 import { acquireLock, releaseLock } from '../core/lock.js'
+import { WIKI_CATEGORIES, type WikiCategory } from '../agent/types.js'
 
 export function createAxiomTools(config: AxiomConfig, projectRoot?: string) {
   const { wikiDir, rawDir } = config
@@ -56,7 +57,7 @@ export function createAxiomTools(config: AxiomConfig, projectRoot?: string) {
     id: 'list_pages',
     description: 'List wiki pages with metadata. Optionally filter by category or text.',
     inputSchema: z.object({
-      category: z.enum(['entities', 'concepts', 'sources', 'analyses']).optional(),
+      category: z.enum(WIKI_CATEGORIES).optional(),
       filter: z.string().optional().describe('Text to match in title or summary'),
     }),
     execute: async (input) => wiki.listPages(wikiDir, input.filter, input.category),
@@ -68,7 +69,7 @@ export function createAxiomTools(config: AxiomConfig, projectRoot?: string) {
     inputSchema: z.object({
       query: z.string().describe('Search query'),
       limit: z.number().optional().describe('Max results to return (default: 10)'),
-      category: z.enum(['entities', 'concepts', 'sources', 'analyses']).optional(),
+      category: z.enum(WIKI_CATEGORIES).optional(),
     }),
     execute: async (input) =>
       search.searchWiki(wikiDir, input.query, {

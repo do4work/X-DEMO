@@ -61,10 +61,30 @@ Use wiki-link style for cross-references:
 
 ## Categories
 
+### Generic Categories
 - **entities/** — People, places, organisations, things
 - **concepts/** — Ideas, topics, themes, theories
 - **sources/** — One summary page per raw source file
 - **analyses/** — Comparison pages, filed answers, syntheses
+
+### Requirements (System Software Design)
+- **requirements/frs/** — Functional Requirements Specification (功能需求规格)
+- **requirements/nfrs/** — Non-Functional Requirements (非功能需求：性能、安全、可靠性等)
+- **requirements/ucs/** — Use Cases (用例概览、用户与系统交互)
+
+### Architecture (System Software Design)
+- **architecture/overview/** — Architecture overview, design principles
+- **architecture/modules/** — Module definitions, interface contracts
+- **architecture/adrs/** — Architecture Decision Records (架构决策记录)
+
+### Features (System Software Design)
+- **features/specs/** — Feature specifications, detailed design (LLD)
+- **features/interfaces/** — Interface specifications (API, UI)
+- **features/data-models/** — Data models, entity definitions
+
+### Scenarios (System Software Design)
+- **scenarios/uc-flows/** — Use Case flows, sequence diagrams
+- **scenarios/bp-flows/** — Business process flows, activity diagrams
 `
 
 const INDEX_TEMPLATE = `# Wiki Index
@@ -103,6 +123,17 @@ export async function scaffoldWiki(wikiDir: string): Promise<void> {
     'wiki/pages/concepts',
     'wiki/pages/sources',
     'wiki/pages/analyses',
+    'wiki/pages/requirements/frs',
+    'wiki/pages/requirements/nfrs',
+    'wiki/pages/requirements/ucs',
+    'wiki/pages/architecture/overview',
+    'wiki/pages/architecture/modules',
+    'wiki/pages/architecture/adrs',
+    'wiki/pages/features/specs',
+    'wiki/pages/features/interfaces',
+    'wiki/pages/features/data-models',
+    'wiki/pages/scenarios/uc-flows',
+    'wiki/pages/scenarios/bp-flows',
     'breath',
   ]
   for (const dir of dirs) {

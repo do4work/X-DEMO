@@ -113,7 +113,7 @@ export function resolveModel(config: AxiomConfig): AnyModel {
     case 'mistral':
       return createOpenAICompatible(resolveEndpoint('mistral', config.baseUrl), apiKey)(modelId)
     case 'custom':
-      return createOpenAICompatible(resolveEndpoint('custom', config.baseUrl), apiKey)(modelId)
+      return createOpenAICompatible(resolveEndpoint('custom', config.baseUrl), apiKey).chat(modelId)
     case 'qwen': {
       const baseURL = resolveEndpoint('qwen', config.baseUrl)
       const debug = process.env['AXIOM_DEBUG'] === '1'

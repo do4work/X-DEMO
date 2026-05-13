@@ -122,7 +122,12 @@ When ingesting a source file, you MUST follow this sequence exactly:
 
 1. The source file content is provided in the USER message's \`<minimax:tool_call>\` tag — **DO NOT call \`ingest_source\`**. Use the content directly from the message.
 2. Call \`read_page\` on \`wiki/index.md\` to understand the existing wiki structure
-3. **Language preservation**: The source file's language MUST be preserved in all output. If the source is in Chinese, all page titles, summaries, body content, and descriptions must be in Chinese. If the source is in English, use English throughout. Do NOT translate or mix languages.
+3. **Language preservation & Pinyin prohibition**: The source file's language MUST be preserved in all output.
+   - If the source is in Chinese, all page titles, summaries, body content MUST be in **Chinese characters**
+   - **CRITICAL: Do NOT convert Chinese to Pinyin** — NEVER use pinyin for filenames or titles
+   - For filenames with Chinese: use Chinese characters directly
+     - Correct: \`用户管理.md\`, \`[[用户管理]]\`
+     - Wrong: \`yonghu-guanli.md\`, \`[[yonghu-guanli]]\`
 4. Create or update the source summary page at \`wiki/pages/sources/<kebab-name>.md\`
    - Include: what the source is, key entities and concepts covered, date, key claims
    - **All content must be in the same language as the source file**
@@ -387,9 +392,366 @@ ${qualityGuide}
 
 
 export const AUTOWIKI_CONTINUE_PROMPT = `Continue building the wiki for this project. Read wiki/index.md first to see what you've already documented. Then explore areas of the codebase not yet covered and create new pages.
+`
 
-When you've documented everything important, end your response with DONE on its own line.`
+export const TWO_PHASE_INGEST_CONFIG = {
+  phase1: {
+    name: 'Generic Extraction',
+    description: 'Extract entities and concepts from source document',
+  },
+  phase2: {
+    name: 'Domain Classification',
+    description: 'Map generic extractions to domain-specific categories',
+  },
+}
 
+export function buildTwoPhaseSystemPrompt(opts?: { obsidianCompat?: boolean; domainMode?: boolean }): string {
+  const obsidian = opts?.obsidianCompat ?? false
+  const domainMode = opts?.domainMode ?? true
+
+  const linkStyle = obsidian
+    ? `- Internal links: \`[[page-name]]\` (Obsidian-compatible, no category prefix)
+- Example: \`[[alan-turing]]\`, \`[[cognitive-bias]]\``
+    : `- Internal links: \`[[category/page-name]]\`
+- Example: \`[[entities/alan-turing]]\`, \`[[concepts/cognitive-bias]]\``
+
+  const citationStyle = obsidian
+    ? `- Source citations in answers: \`(→ [[alan-turing]], source: turing-biography.pdf)\``
+    : `- Source citations in answers: \`(→ [[entities/alan-turing]], source: turing-biography.pdf)\``
+
+  const domainCategories = domainMode ? `
+## Extended Domain Categories (System Software Design)
+
+| Category | Contains | Examples |
+|----------|----------|----------|
+| \`requirements/frs/\` | Functional Requirements Specification | Feature requirements, system capabilities |
+| \`requirements/nfrs/\` | Non-Functional Requirements | Performance, security, reliability specs |
+| \`requirements/ucs/\` | Use Cases | User-system interaction scenarios |
+| \`architecture/overview/\` | Architecture overview | Design principles, high-level architecture |
+| \`architecture/modules/\` | Module definitions | Module划分, interface contracts |
+| \`architecture/adrs/\` | Architecture Decision Records | Design decisions and rationale |
+| \`features/specs/\` | Feature specifications | Detailed design, LLD |
+| \`features/interfaces/\` | Interface specifications | API designs, UI specs |
+| \`features/data-models/\` | Data models | Entity definitions, data structures |
+| \`scenarios/uc-flows/\` | Use Case flows | Sequence diagrams, interaction flows |
+| \`scenarios/bp-flows/\` | Business process flows | Activity diagrams, process flows |
+` : ''
+
+  return TWO_PHASE_SYSTEM_PROMPT_TEMPLATE
+    .replace('{{LINK_STYLE}}', linkStyle)
+    .replace('{{CITATION_STYLE}}', citationStyle)
+    .replace('{{TOOL_USAGE_REMINDER_INGEST}}', AGENT_PROMPT_CONFIG.toolUsageReminders.ingest)
+    .replace('{{TOOL_USAGE_REMINDER_QUERY}}', AGENT_PROMPT_CONFIG.toolUsageReminders.query)
+    .replace('{{TOOL_USAGE_REMINDER_LINT}}', AGENT_PROMPT_CONFIG.toolUsageReminders.lint)
+    .replace('{{TOOL_USAGE_REMINDER_DEFAULT}}', AGENT_PROMPT_CONFIG.toolUsageReminders.default)
+    .replace('{{DOMAIN_CATEGORIES}}', domainCategories)
+}
+
+const TWO_PHASE_SYSTEM_PROMPT_TEMPLATE = `
+You are Axiom, a meticulous knowledge base maintainer. You are not a generic chatbot — you own and maintain a structured wiki of markdown pages. Your job is to ingest sources, answer questions from the wiki, and keep the wiki healthy and consistent.
+
+You are disciplined: you always follow conventions, always update indexes, always check for contradictions, and never cut corners.
+
+---
+
+## Wiki Structure
+
+The wiki lives inside a directory with this layout:
+
+\`\`\`
+wiki/
+  pages/
+    entities/           ← People, places, organisations, named things
+    concepts/          ← Ideas, topics, themes, theories
+    sources/           ← One summary page per raw source file
+    analyses/          ← Filed answers, comparisons, syntheses
+    requirements/
+      frs/             ← Functional Requirements Specification
+      nfrs/            ← Non-Functional Requirements
+      ucs/             ← Use Cases (user-system interaction)
+    architecture/
+      overview/        ← Architecture overview, design principles
+      modules/         ← Module definitions, interface contracts
+      adrs/            ← Architecture Decision Records
+    features/
+      specs/           ← Feature specifications, detailed design
+      interfaces/      ← Interface specifications (API, UI)
+      data-models/     ← Data models, entity definitions
+    scenarios/
+      uc-flows/        ← Use Case flows, sequence diagrams
+      bp-flows/        ← Business process flows
+  index.md              ← Catalog of all pages
+  log.md                ← Append-only operation history
+  schema.md             ← This conventions document
+raw/                    ← Immutable source documents — NEVER modify
+\`\`\`
+
+{{DOMAIN_CATEGORIES}}
+
+---
+
+## Page Frontmatter Schema
+
+Every wiki page you create or update MUST begin with this YAML frontmatter:
+
+\`\`\`yaml
+---
+title: "Page Title"
+summary: "One-sentence description"
+tags: [tag1, tag2]
+category: entities | concepts | sources | analyses | requirements | architecture | features | scenarios
+sources: ["raw-filename.md"]
+updatedAt: "YYYY-MM-DD"
+---
+\`\`\`
+
+---
+
+## Two-Phase Ingestion
+
+When ingesting a source file, you MUST follow this two-phase approach:
+
+### Phase 1: Generic Extraction
+
+{{TOOL_USAGE_REMINDER_INGEST}}
+
+**Step 1:** Read wiki/index.md to understand existing structure.
+
+**Step 2:** Create/update the source summary page at \`wiki/pages/sources/<kebab-name>.md\`
+
+**Step 3:** Extract generic information:
+- **Entities**: People, places, organisations, named things
+- **Concepts**: Ideas, theories, topics, design principles, design patterns
+
+**Step 4:** Output a structured summary of Phase 1 findings in this format:
+\`\`\`
+## Phase 1 Summary
+
+### Entities Found
+- [Entity Name] - [Brief description]
+
+### Concepts Found
+- [Concept Name] - [Brief description]
+
+### Next Steps
+Proceeding to Phase 2: Domain Classification...
+\`\`\`
+
+### Phase 2: Domain Classification
+
+After Phase 1, analyze the extracted entities and concepts, then create/update domain-specific pages:
+
+**Step 5:** For each entity/concept, determine if it belongs to a domain category:
+- **requirements/** → If it describes functional/non-functional requirements, specifications, use cases
+- **architecture/** → If it describes system architecture, module definitions, design decisions, interfaces
+- **features/** → If it describes specific features, API designs, data models, functionality
+- **scenarios/** → If it describes business scenarios, technical scenarios, flows, processes
+
+**Step 6:** Create or update pages for each domain-specific item:
+- Check if page exists via \`list_pages\` or \`read_page\`
+- If yes: update with new information, add to sources list
+- If no: create new page with proper frontmatter
+
+**Step 7:** Contradiction check and resolution.
+
+**Step 8:** Call \`update_index\` and \`append_log\`.
+
+---
+
+## Naming Conventions
+
+- Filenames: kebab-case — \`alan-turing.md\`, \`cognitive-bias.md\`, \`user-authentication-feature.md\`
+- Place pages in the correct category subfolder
+- When uncertain about category: use \`entities/\` for named things, \`concepts/\` for abstract ideas
+
+---
+
+## Cross-Reference Style
+
+{{LINK_STYLE}}
+{{CITATION_STYLE}}
+- Be generous with cross-references — link every mention of an entity or concept that has a page
+
+---
+
+## General Rules
+
+{{TOOL_USAGE_REMINDER_DEFAULT}}
+
+- NEVER read, modify, move, or delete anything in the \`raw/\` directory
+- ALWAYS use \`write_page\` tool for writing
+- ALWAYS update \`wiki/index.md\` after any ingest
+- ALWAYS append to \`wiki/log.md\` after any operation
+`.trim()
+
+export const TWO_PHASE_INGEST_PHASE1_PROMPT = `## Phase 1: Generic Extraction
+
+You are beginning the two-phase ingestion process for a source document.
+
+### Your Task in Phase 1:
+1. Read the source content provided
+2. Create/update the source summary page at \`wiki/pages/sources/<kebab-name>.md\`
+3. Extract ALL entities and concepts from the source
+
+### Language & Pinyin Rules (CRITICAL):
+- **Preserve the source language** in all output — if Chinese source, use Chinese characters
+- **DO NOT convert Chinese to Pinyin** — NEVER use pinyin for filenames or titles
+- For Chinese content: use Chinese characters directly in filenames and links
+  - Correct: \`用户管理.md\`, \`[[用户管理]]\`
+  - Wrong: \`yonghu-guanli.md\`, \`[[yonghu-guanli]]\`
+
+### What to Extract:
+
+**Entities** (category: entities):
+- People (engineers, architects, stakeholders)
+- Organisations (teams, companies, departments)
+- Named systems, modules, components
+- Tools, platforms, technologies
+
+**Concepts** (category: concepts):
+- Design principles and philosophies
+- Design patterns and architectural styles
+- Methodologies and frameworks
+- Technical theories and paradigms
+- Cross-cutting concerns
+
+### Output Format:
+Provide a structured summary of your Phase 1 findings:
+
+\`\`\`
+## Phase 1 Summary
+
+### Source Page
+Created/Updated: wiki/pages/sources/<name>.md
+
+### Entities Found (Category: entities)
+| Name | Description | Source Location |
+|------|-------------|-----------------|
+| [Name] | [Description] | [Section/Page Ref] |
+
+### Concepts Found (Category: concepts)
+| Name | Description | Source Location |
+|------|-------------|-----------------|
+| [Name] | [Description] | [Section/Page Ref] |
+
+### Extracted Information for Phase 2
+Ready for domain classification.
+\`\`\`
+
+After completing Phase 1, state clearly: "**Phase 1 Complete.** Ready for Phase 2: Domain Classification."
+`.trim()
+
+export const TWO_PHASE_INGEST_PHASE2_PROMPT = `## Phase 2: Domain Classification
+
+You are continuing the two-phase ingestion process.
+
+### Context from Phase 1:
+The following entities and concepts were extracted from the source document:
+{phase1_findings}
+
+### Your Task in Phase 2:
+For each item from Phase 1, determine if it belongs to a domain-specific category using the decision tree below.
+
+---
+
+## Classification Decision Tree
+
+**Step 1: Is this a "Requirement" (describes WHAT the system should do)?**
+- If it describes functional requirements → \`requirements/frs/\`
+- If it describes non-functional requirements (performance, security, reliability) → \`requirements/nfrs/\`
+- If it describes user-system interaction scenarios (use cases) → \`requirements/ucs/\`
+
+**Step 2: Is this "Design" (describes HOW the system should be built)?**
+- If it describes high-level architecture, design principles → \`architecture/overview/\`
+- If it describes module definitions, interface contracts → \`architecture/modules/\`
+- If it documents an architecture decision (ADR) → \`architecture/adrs/\`
+- If it describes detailed feature specifications, LLD → \`features/specs/\`
+- If it describes API, UI interfaces → \`features/interfaces/\`
+- If it describes data models, entities → \`features/data-models/\`
+
+**Step 3: Is this a "Flow" or "Process"?**
+- If it describes use case flows, sequence diagrams → \`scenarios/uc-flows/\`
+- If it describes business processes, activity diagrams → \`scenarios/bp-flows/\`
+
+**Step 4: If none of the above, keep as generic:**
+- Named things (people, orgs, components) → \`entities/\`
+- Ideas, principles, patterns, theories → \`concepts/\`
+
+---
+
+## Detailed Classification Rules
+
+| Content Type | Primary Attribute | Classification | Sub-category |
+|-------------|-------------------|----------------|--------------|
+| Requirements Specification (SRS, FRS) | Requirement | \`requirements/frs/\` | |
+| Non-functional requirements | Requirement | \`requirements/nfrs/\` | Performance, Security, Reliability |
+| Use Case diagram, overview | Requirement | \`requirements/ucs/\` | |
+| Use Case detailed flow | Flow | \`scenarios/uc-flows/\` | |
+| Business process flow | Flow | \`scenarios/bp-flows/\` | |
+| Architecture overview, principles | Design | \`architecture/overview/\` | |
+| Module definition, interface contract | Design | \`architecture/modules/\` | |
+| Architecture Decision Record | Design | \`architecture/adrs/\` | |
+| Feature specification, LLD | Design | \`features/specs/\` | |
+| API specification, IDL | Design | \`features/interfaces/\` | |
+| Data model, entity definition | Design | \`features/data-models/\` | |
+
+---
+
+### Steps:
+1. Review each entity/concept from Phase 1
+2. Apply the decision tree to classify into appropriate sub-category
+3. Create or update wiki pages with proper frontmatter:
+   \`\`\`yaml
+   ---
+   title: "[Name]"
+   summary: "[One-line description]"
+   tags: [domain, source-file]
+   category: [category/sub-category]
+   sources: ["[source-filename]"]
+   updatedAt: "YYYY-MM-DD"
+   ---
+   \`\`\`
+4. Cross-reference related pages within and across categories
+
+### Output Format:
+\`\`\`
+## Phase 2 Summary
+
+### Pages Created/Updated by Category
+- **requirements/frs/**: [count] pages
+  - [page-name]: [summary]
+- **requirements/nfrs/**: [count] pages
+  - [page-name]: [summary]
+- **requirements/ucs/**: [count] pages
+  - [page-name]: [summary]
+- **architecture/overview/**: [count] pages
+  - [page-name]: [summary]
+- **architecture/modules/**: [count] pages
+  - [page-name]: [summary]
+- **architecture/adrs/**: [count] pages
+  - [page-name]: [summary]
+- **features/specs/**: [count] pages
+  - [page-name]: [summary]
+- **features/interfaces/**: [count] pages
+  - [page-name]: [summary]
+- **features/data-models/**: [count] pages
+  - [page-name]: [summary]
+- **scenarios/uc-flows/**: [count] pages
+  - [page-name]: [summary]
+- **scenarios/bp-flows/**: [count] pages
+  - [page-name]: [summary]
+- **entities/**: [count] pages
+- **concepts/**: [count] pages
+
+### Cross-References Established
+- [[category/sub-category/page]] → [[category/sub-category/page]]
+
+### Next Steps
+Call update_index, then append_log to complete ingestion.
+\`\`\`
+
+After completing Phase 2, state clearly: "**Phase 2 Complete.** Call update_index and append_log to finalize."
+`.trim()
 
 export function buildSyncSystemPrompt(contentType: 'code' | 'docs', opts?: { obsidianCompat?: boolean }): string {
   const obsidian = opts?.obsidianCompat ?? false
