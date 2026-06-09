@@ -1,0 +1,801 @@
+[14:55:09 INF] 日志文件已创建：d:\PROJ\AI_WIKI\ontogpt-main\ontogpt-main\demo\log\demo_ontogpt_20260609_145509.log
+[14:55:09 INF] 
+[Step 1] Generating Pydantic model from schema...
+[14:55:09 INF] [Step 1] Generated: d:\PROJ\AI_WIKI\ontogpt-main\ontogpt-main\demo\schema\generated_mx_design.py
+[14:55:09 INF] 
+[Step 2] Loading generated Python class from: d:\PROJ\AI_WIKI\ontogpt-main\ontogpt-main\demo\schema\generated_mx_design.py
+[14:55:09 INF] [Step 2] Found class: Requirement
+[14:55:09 INF] 
+[Step 3] Creating SPIRESEngine with generated model...
+[14:55:09 INF] [Step 3] Engine created: SPIRESEngine
+[14:55:09 INF] [注入] 宽松提取 系统提示词（长度：7284 字符）
+[14:55:09 INF] 
+[JSON 验证] 发起首次提取请求...
+[14:55:39 INF] 
+================================================================================
+[14:55:39 INF] [JSON 验证] 首次 LLM 响应 result 对象属性:
+[14:55:39 INF] ================================================================================
+[14:55:39 INF]   raw_completion_output: str = ```json
+[
+  {
+    "id": "FR-SPACE-001",
+    "label": "多频段载荷",
+    "description": "卫星载荷需同时支持 Ka 频段 (20/30GHz) 用户链路与 Q/V 频段 (40/50GHz) 馈电链路，并可选配 L/S 频段窄波束用于导航增强。",
+    "sourceLocation": "4.1.1",
+    "allocatedTo": null,
+    "dependsOn": ["FR-GROUND-003", "FR-CONTROL-001"],
+    "priority": "高",
+    "verificationMethod": "仿真测试 + 在轨验证",
+    "status": null,
+    "acceptanceCriteria": [
+      {
+        "kind": "quantitative",
+        "metric": "Ka频段下行频率下限",
+        "operator": "GE",
+        "value": 19.2,
+        "unit": "GHz"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "Ka频段下行频率上限",
+        "operator": "LE",
+        "value": 21.2,
+        "unit": "GHz"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "Ka频段上行频率下限",
+        "operator": "GE",
+        "value": 29.0,
+        "unit": "GHz"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "Ka频段上行频率上限",
+        "operator": "LE",
+        "value": 31.0,
+        "unit": "GHz"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "点波束数量",
+        "operator": "GE",
+        "value": 64,
+        "unit": null
+      },
+      {
+        "kind": "quantitative",
+        "metric": "波束宽度",
+        "operator": "LE",
+        "value": 0.8,
+        "unit": "deg"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "波束间隔离度",
+        "operator": "GE",
+        "value": 25,
+        "unit": "dB"
+      },
+      {
+        "kind": "qualitative",
+        "metric": "频率规划",
+        "pattern": "4色复用"
+      }
+    ]
+  },
+  {
+    "id": "FR-SPACE-002",
+    "label": "星间链路",
+    "description": "同轨道面相邻卫星建立激光/微波星间链路，支持空间组网与数据面路由。",
+    "sourceLocation": "4.1.2",
+    "allocatedTo": null,
+    "dependsOn": ["FR-SPACE-001"],
+    "priority": "高",
+    "verificationMethod": "地面测试 + 仿真",
+    "status": null,
+    "acceptanceCriteria": [
+      {
+        "kind": "quantitative",
+        "metric": "激光ISL速率",
+        "operator": "GE",
+        "value": 10,
+        "unit": "Gbit/s"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "激光ISL距离",
+        "operator": "GE",
+        "value": 2000,
+        "unit": "km"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "激光ISL距离",
+        "operator": "LE",
+        "value": 6000,
+        "unit": "km"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "微波ISL速率",
+        "operator": "GE",
+        "value": 1,
+        "unit": "Gbit/s"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "链路捕获时间",
+        "operator": "LE",
+        "value": 60,
+        "unit": "s"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "链路误码率",
+        "operator": "LE",
+        "value": 1e-6,
+        "unit": null
+      }
+    ]
+  },
+  {
+    "id": "FR-SPACE-003",
+    "label": "星上处理与交换",
+    "description": "载荷具备星上基带处理与交换能力，支持业务流星的本地交换与再生处理。",
+    "sourceLocation": "4.1.3",
+    "allocatedTo": null,
+    "dependsOn": ["FR-SPACE-002"],
+    "priority": "中",
+    "verificationMethod": "硬件在环测试",
+    "status": null,
+    "acceptanceCriteria": [
+      {
+        "kind": "quantitative",
+        "metric": "星上交换容量",
+        "operator": "GE",
+        "value": 100,
+        "unit": "Gbit/s"
+      },
+      {
+        "kind": "qualitative",
+        "metric": "分组交换协议",
+        "pattern": "IPv4/IPv6"
+      },
+      {
+        "kind": "qualitative",
+        "metric": "QoS支持",
+        "pattern": "DiffServ"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "星上缓存",
+        "operator": "GE",
+        "value": 10,
+        "unit": "Gbyte"
+      }
+    ]
+  }
+]
+```
+[14:55:39 INF]   named_entities: list = []
+[14:55:39 INF] ================================================================================
+
+[14:55:39 INF] 
+[JSON 验证] 开始 JSON 格式验证与修复循环...
+[14:55:39 INF] [JSON 验证] 首次验证 JSON 格式...
+[14:55:39 INF] [JSON 验证] [通过] JSON 格式验证通过！
+[14:55:39 INF] 
+[Step 5a] Parsing JSON to YAML data...
+[14:55:39 INF] [Step 5a] [通过] JSON parsed successfully!
+[14:55:39 INF] 
+[Step 5b] Injecting metadata and saving YAML...
+[14:55:39 INF] [Step 5b] Output file: d:\PROJ\AI_WIKI\ontogpt-main\ontogpt-main\demo\yaml\chunk_012_20260609_145539.yaml
+[14:55:39 INF] [UCUM] Loaded 311 UCUM codes, 24 prefixes, and 96 aliases from CSV files.
+[14:55:39 INF] [UCUM] Cleansed unit: 'Gbyte' -> 'GBy'
+[14:55:39 INF] [UCUM] Total 1 unit(s) cleansed, 0 unit(s) marked as non-UCUM.
+[14:55:39 INF] [Step 5b] [通过] YAML file saved successfully!
+[14:55:39 INF] [Step 5b] File size: 3167 bytes
+[14:55:39 INF] [宽松提取] 成功生成 YAML 文件：d:\PROJ\AI_WIKI\ontogpt-main\ontogpt-main\demo\yaml\chunk_012_20260609_145539.yaml
+[14:55:39 INF] [宽松提取] 此阶段不做 Pydantic 验证，允许提取 schema 外的新信息
+[14:55:39 INF] [阶段一完成] 宽松提取 YAML: d:\PROJ\AI_WIKI\ontogpt-main\ontogpt-main\demo\yaml\chunk_012_20260609_145539.yaml
+[14:55:39 INF] [Schema 生长] 开始 Schema 自生长循环
+[14:55:39 INF] 
+--- [Schema 生长] 第 1/5 轮 ---
+[14:55:48 INF] [Schema 生长] LLM 分析结果：当前实体数据中的所有字段（如 priority, verificationMethod, acceptanceCriteria 中的 kind, metric, operator, value, unit, pattern 等）均已被现有 schema 中的 Requirement、QuantitativeCriterion、QualitativeCriterion 等类覆盖，未发现新的模式或未定义的字段，无需扩展。
+[14:55:48 INF] [Schema 生长] 暂无生长建议，退出循环
+[14:55:48 INF] 
+[Step 1] Generating Pydantic model from schema...
+[14:55:48 INF] [Step 1] Generated: d:\PROJ\AI_WIKI\ontogpt-main\ontogpt-main\demo\schema\generated_mx_design.py
+[14:55:48 INF] 
+[Step 2] Loading generated Python class from: d:\PROJ\AI_WIKI\ontogpt-main\ontogpt-main\demo\schema\generated_mx_design.py
+[14:55:48 INF] [Step 2] Found class: Requirement
+[14:55:48 INF] 
+[Step 3] Creating SPIRESEngine with generated model...
+[14:55:48 INF] [Step 3] Engine created: SPIRESEngine
+[14:55:48 INF] 
+[严格提取] 开始严格提取阶段（使用 schema: sys-mx）
+[14:55:48 INF] [注入] 严格提取 系统提示词（长度：5579 字符）
+[14:55:48 INF] 
+[JSON 验证] 发起首次提取请求...
+[14:57:53 INF] 
+================================================================================
+[14:57:53 INF] [JSON 验证] 首次 LLM 响应 result 对象属性:
+[14:57:53 INF] ================================================================================
+[14:57:53 INF]   raw_completion_output: str = ```json
+[
+  {
+    "id": "FR-SPACE-001",
+    "label": "多频段载荷",
+    "description": "卫星载荷需同时支持 Ka 频段 (20/30GHz) 用户链路与 Q/V 频段 (40/50GHz) 馈电链路，并可选配 L/S 频段窄波束用于导航增强。",
+    "sourceLocation": [
+      {
+        "sectionTitle": "4.1.1 多频段载荷 (FR-SPACE-001)",
+        "span": "50:383"
+      }
+    ],
+    "allocatedTo": "SPACE-SEGMENT",
+    "dependsOn": [
+      {"id": "FR-GROUND-003"},
+      {"id": "FR-CONTROL-001"}
+    ],
+    "priority": "高",
+    "verificationMethod": "测试",
+    "status": null,
+    "acceptanceCriteria": [
+      {
+        "kind": "quantitative",
+        "metric": "Ka频段用户链路下行频率",
+        "operator": "GE",
+        "value": 19.2,
+        "unit": "GHz"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "Ka频段用户链路下行频率",
+        "operator": "LE",
+        "value": 21.2,
+        "unit": "GHz"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "Ka频段用户链路上行频率",
+        "operator": "GE",
+        "value": 29.0,
+        "unit": "GHz"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "Ka频段用户链路上行频率",
+        "operator": "LE",
+        "value": 31.0,
+        "unit": "GHz"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "单星点波束数",
+        "operator": "GE",
+        "value": 64,
+        "unit": null
+      },
+      {
+        "kind": "quantitative",
+        "metric": "波束宽度",
+        "operator": "LE",
+        "value": 0.8,
+        "unit": "deg"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "波束间隔离度",
+        "operator": "GE",
+        "value": 25,
+        "unit": "dB"
+      },
+      {
+        "kind": "qualitative",
+        "metric": "频率复用规划",
+        "pattern": "4色复用"
+      }
+    ]
+  },
+  {
+    "id": "FR-SPACE-002",
+    "label": "星间链路",
+    "description": "同轨道面相邻卫星建立激光/微波星间链路，支持空间组网与数据面路由。",
+    "sourceLocation": [
+      {
+        "sectionTitle": "4.1.2 星间链路 (FR-SPACE-002)",
+        "span": "383:683"
+      }
+    ],
+    "allocatedTo": "SPACE-SEGMENT",
+    "dependsOn": [
+      {"id": "FR-SPACE-001"}
+    ],
+    "priority": "高",
+    "verificationMethod": "测试",
+    "status": null,
+    "acceptanceCriteria": [
+      {
+        "kind": "quantitative",
+        "metric": "激光ISL速率",
+        "operator": "GE",
+        "value": 10,
+        "unit": "Gbit/s"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "激光ISL距离",
+        "operator": "GE",
+        "value": 2000,
+        "unit": "km"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "激光ISL距离",
+        "operator": "LE",
+        "value": 6000,
+        "unit": "km"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "微波ISL速率",
+        "operator": "GE",
+        "value": 1,
+        "unit": "Gbit/s"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "链路捕获时间",
+        "operator": "LE",
+        "value": 60,
+        "unit": "s"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "链路误码率",
+        "operator": "LE",
+        "value": 1e-6,
+        "unit": null
+      }
+    ]
+  },
+  {
+    "id": "FR-SPACE-003",
+    "label": "星上处理与交换",
+    "description": "载荷具备星上基带处理与交换能力，支持业务流星的本地交换与再生处理。",
+    "sourceLocation": [
+      {
+        "sectionTitle": "4.1.3 星上处理与交换 (FR-SPACE-003)",
+        "span": "683:1000"
+      }
+    ],
+    "allocatedTo": "SPACE-SEGMENT",
+    "dependsOn": [
+      {"id": "FR-SPACE-002"}
+    ],
+    "priority": "中",
+    "verificationMethod": "测试",
+    "status": null,
+    "acceptanceCriteria": [
+      {
+        "kind": "quantitative",
+        "metric": "星上交换容量",
+        "operator": "GE",
+        "value": 100,
+        "unit": "Gbit/s"
+      },
+      {
+        "kind": "qualitative",
+        "metric": "分组交换支持",
+        "pattern": "IPv4/IPv6分组交换"
+      },
+      {
+        "kind": "qualitative",
+        "metric": "QoS支持",
+        "pattern": "基于DiffServ的QoS标记与队列调度"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "星上缓存容量",
+        "operator": "GE",
+        "value": 10,
+        "unit": "GByte"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "交换时延",
+        "operator": "LT",
+        "value": 5,
+        "unit": "ms"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "丢包率",
+        "operator": "LT",
+        "value": 0.001,
+        "unit": "%"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "最大并发流数",
+        "operator": "GE",
+        "value": 10000,
+        "unit": null
+      }
+    ]
+  }
+]
+```
+[14:57:53 INF]   named_entities: list = []
+[14:57:53 INF] ================================================================================
+
+[14:57:53 INF] 
+[JSON 验证] 开始 JSON 格式验证与修复循环...
+[14:57:53 INF] [JSON 验证] 首次验证 JSON 格式...
+[14:57:53 INF] [JSON 验证] [通过] JSON 格式验证通过！
+[14:57:53 INF] 
+================================================================================
+[14:57:53 INF] [Pydantic 验证] Pydantic 结构验证（严审）
+[14:57:53 INF] ================================================================================
+[14:57:53 INF] [Pydantic 验证] 首次验证 Pydantic 结构...
+[14:57:54 INF] [Pydantic 验证] [错误] Pydantic 结构验证失败：Pydantic 验证错误：2 validation errors for Requirement
+dependsOn.0
+  Input should be a valid string [type=string_type, input_value={'id': 'FR-GROUND-003'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/string_type
+dependsOn.1
+  Input should be a valid string [type=string_type, input_value={'id': 'FR-CONTROL-001'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/string_type
+
+【完整堆栈追踪】
+Traceback (most recent call last):
+  File "d:\PROJ\AI_WIKI\ontogpt-main\ontogpt-main\demo\demo_ontogpt.py", line 407, in validate_pydantic_structure
+    engine.parse_completion_payload(raw_response, cls=engine.template_class)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PROJ\AI_WIKI\ontogpt-main\ontogpt-main\src\ontogpt\engines\spires_engine.py", line 1098, in parse_completion_payload
+    grounded = self.ground_annotation_object(obj, cls)
+  File "D:\PROJ\AI_WIKI\ontogpt-main\ontogpt-main\src\ontogpt\engines\spires_engine.py", line 1266, in ground_annotation_object
+    return py_cls(**new_ann)
+  File "D:\PROJ\AI_WIKI\ontogpt-main\ontogpt-main\.venv\Lib\site-packages\pydantic\main.py", line 263, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+pydantic_core._pydantic_core.ValidationError: 2 validation errors for Requirement
+dependsOn.0
+  Input should be a valid string [type=string_type, input_value={'id': 'FR-GROUND-003'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/string_type
+dependsOn.1
+  Input should be a valid string [type=string_type, input_value={'id': 'FR-CONTROL-001'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/string_type
+
+
+【LLM 返回的原始 JSON（前2000字符）】
+```json
+[
+  {
+    "id": "FR-SPACE-001",
+    "label": "多频段载荷",
+    "description": "卫星载荷需同时支持 Ka 频段 (20/30GHz) 用户链路与 Q/V 频段 (40/50GHz) 馈电链路，并可选配 L/S 频段窄波束用于导航增强。",
+    "sourceLocation": [
+      {
+        "sectionTitle": "4.1.1 多频段载荷 (FR-SPACE-001)",
+        "span": "50:383"
+      }
+    ],
+    "allocatedTo": "SPACE-SEGMENT",
+    "dependsOn": [
+      {"id": "FR-GROUND-003"},
+      {"id": "FR-CONTROL-001"}
+    ],
+    "priority": "高",
+    "verificationMethod": "测试",
+    "status": null,
+    "acceptanceCriteria": [
+      {
+        "kind": "quantitative",
+        "metric": "Ka频段用户链路下行频率",
+        "operator": "GE",
+        "value": 19.2,
+        "unit": "GHz"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "Ka频段用户链路下行频率",
+        "operator": "LE",
+        "value": 21.2,
+        "unit": "GHz"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "Ka频段用户链路上行频率",
+        "operator": "GE",
+        "value": 29.0,
+        "unit": "GHz"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "Ka频段用户链路上行频率",
+        "operator": "LE",
+        "value": 31.0,
+        "unit": "GHz"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "单星点波束数",
+        "operator": "GE",
+        "value": 64,
+        "unit": null
+      },
+      {
+        "kind": "quantitative",
+        "metric": "波束宽度",
+        "operator": "LE",
+        "value": 0.8,
+        "unit": "deg"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "波束间隔离度",
+        "operator": "GE",
+        "value": 25,
+        "unit": "dB"
+      },
+      {
+        "kind": "qualitative",
+        "metric": "频率复用规划",
+        "pattern": "4色复用"
+      }
+    ]
+  },
+  {
+    "id": "FR-SPACE-002",
+    "label": "星间链路",
+    "description": "同轨道面相邻卫星建立激光/微波星间链路，支持空间组网与数据面路由。",
+    "sourceLocation": [
+      {
+        "sectionTitle": "4.1.2 星间链路 (FR-SPACE-002)",
+        "span": "383:683"
+      }
+    ],
+    "allocatedTo": "SPACE-SEGMENT",
+    "dependsOn": [
+      {"id": "FR-SPACE-001"}
+    ],
+
+[14:57:54 INF] [Pydantic 验证] 进入修复循环...
+[14:57:54 INF] 
+[Pydantic 验证] 第 1 次修复尝试 (最大 3 次)
+[14:57:54 INF] [注入] Pydantic 结构修正 系统提示词（长度：11561 字符）
+[14:58:06 INF] 
+================================================================================
+[14:58:06 INF] [Pydantic 验证] 第 1 轮 LLM 响应 result 对象属性:
+[14:58:06 INF] ================================================================================
+[14:58:06 INF]   raw_completion_output: str = ```json
+[
+  {
+    "id": "FR-SPACE-001",
+    "label": "多频段载荷",
+    "description": "卫星载荷需同时支持 Ka 频段 (20/30GHz) 用户链路与 Q/V 频段 (40/50GHz) 馈电链路，并可选配 L/S 频段窄波束用于导航增强。",
+    "sourceLocation": [
+      {
+        "sectionTitle": "4.1.1 多频段载荷 (FR-SPACE-001)",
+        "span": "50:383"
+      }
+    ],
+    "allocatedTo": "SPACE-SEGMENT",
+    "dependsOn": [
+      "FR-GROUND-003",
+      "FR-CONTROL-001"
+    ],
+    "priority": "高",
+    "verificationMethod": "测试",
+    "status": null,
+    "acceptanceCriteria": [
+      {
+        "kind": "quantitative",
+        "metric": "Ka频段用户链路下行频率",
+        "operator": "GE",
+        "value": 19.2,
+        "unit": "GHz"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "Ka频段用户链路下行频率",
+        "operator": "LE",
+        "value": 21.2,
+        "unit": "GHz"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "Ka频段用户链路上行频率",
+        "operator": "GE",
+        "value": 29.0,
+        "unit": "GHz"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "Ka频段用户链路上行频率",
+        "operator": "LE",
+        "value": 31.0,
+        "unit": "GHz"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "单星点波束数",
+        "operator": "GE",
+        "value": 64,
+        "unit": null
+      },
+      {
+        "kind": "quantitative",
+        "metric": "波束宽度",
+        "operator": "LE",
+        "value": 0.8,
+        "unit": "deg"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "波束间隔离度",
+        "operator": "GE",
+        "value": 25,
+        "unit": "dB"
+      },
+      {
+        "kind": "qualitative",
+        "metric": "频率复用规划",
+        "pattern": "4色复用"
+      }
+    ]
+  },
+  {
+    "id": "FR-SPACE-002",
+    "label": "星间链路",
+    "description": "同轨道面相邻卫星建立激光/微波星间链路，支持空间组网与数据面路由。",
+    "sourceLocation": [
+      {
+        "sectionTitle": "4.1.2 星间链路 (FR-SPACE-002)",
+        "span": "383:683"
+      }
+    ],
+    "allocatedTo": "SPACE-SEGMENT",
+    "dependsOn": [
+      "FR-SPACE-001"
+    ],
+    "priority": "高",
+    "verificationMethod": "测试",
+    "status": null,
+    "acceptanceCriteria": [
+      {
+        "kind": "quantitative",
+        "metric": "激光ISL速率",
+        "operator": "GE",
+        "value": 10,
+        "unit": "Gbit/s"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "激光ISL距离",
+        "operator": "GE",
+        "value": 2000,
+        "unit": "km"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "激光ISL距离",
+        "operator": "LE",
+        "value": 6000,
+        "unit": "km"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "微波ISL速率",
+        "operator": "GE",
+        "value": 1,
+        "unit": "Gbit/s"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "链路捕获时间",
+        "operator": "LE",
+        "value": 60,
+        "unit": "s"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "链路误码率",
+        "operator": "LE",
+        "value": 1e-6,
+        "unit": null
+      }
+    ]
+  },
+  {
+    "id": "FR-SPACE-003",
+    "label": "星上处理与交换",
+    "description": "载荷具备星上基带处理与交换能力，支持业务流星的本地交换与再生处理。",
+    "sourceLocation": [
+      {
+        "sectionTitle": "4.1.3 星上处理与交换 (FR-SPACE-003)",
+        "span": "683:1000"
+      }
+    ],
+    "allocatedTo": "SPACE-SEGMENT",
+    "dependsOn": [
+      "FR-SPACE-002"
+    ],
+    "priority": "中",
+    "verificationMethod": "测试",
+    "status": null,
+    "acceptanceCriteria": [
+      {
+        "kind": "quantitative",
+        "metric": "星上交换容量",
+        "operator": "GE",
+        "value": 100,
+        "unit": "Gbit/s"
+      },
+      {
+        "kind": "qualitative",
+        "metric": "分组交换支持",
+        "pattern": "IPv4/IPv6分组交换"
+      },
+      {
+        "kind": "qualitative",
+        "metric": "QoS支持",
+        "pattern": "基于DiffServ的QoS标记与队列调度"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "星上缓存容量",
+        "operator": "GE",
+        "value": 10,
+        "unit": "GByte"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "交换时延",
+        "operator": "LT",
+        "value": 5,
+        "unit": "ms"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "丢包率",
+        "operator": "LT",
+        "value": 0.001,
+        "unit": "%"
+      },
+      {
+        "kind": "quantitative",
+        "metric": "最大并发流数",
+        "operator": "GE",
+        "value": 10000,
+        "unit": null
+      }
+    ]
+  }
+]
+```
+[14:58:06 INF]   named_entities: list = []
+[14:58:06 INF] ================================================================================
+
+[14:58:06 INF] [Pydantic 验证] 验证修复后的 Pydantic 结构...
+[14:58:06 INF] [Pydantic 验证] [通过] Pydantic 结构验证通过！
+[14:58:06 INF] 
+[Step 5a] Parsing JSON to YAML data...
+[14:58:06 INF] [Step 5a] [通过] JSON parsed successfully!
+[14:58:06 INF] 
+[Step 5b] Injecting metadata and saving YAML...
+[14:58:06 INF] [Step 5b] Output file: d:\PROJ\AI_WIKI\ontogpt-main\ontogpt-main\demo\yaml\chunk_012_20260609_145806.yaml
+[14:58:06 INF] [UCUM] Marked non-UCUM unit: 'GByte' -> 'GByte（非 ucum 单位）'
+[14:58:06 INF] [UCUM] Total 0 unit(s) cleansed, 1 unit(s) marked as non-UCUM.
+[14:58:06 INF] [Step 5b] [通过] YAML file saved successfully!
+[14:58:06 INF] [Step 5b] File size: 4768 bytes
+[14:58:06 INF] 
+[Step 6] Converting YAML to TTL using linkml-owl...
+[14:58:06 INF] [Step 6] Input YAML: d:\PROJ\AI_WIKI\ontogpt-main\ontogpt-main\demo\yaml\chunk_012_20260609_145806.yaml
+[14:58:06 INF] [Step 6] Schema: d:\PROJ\AI_WIKI\ontogpt-main\ontogpt-main\demo\schema\mx_V0.01.yaml
+[14:58:06 INF] [Step 6] Output TTL: d:\PROJ\AI_WIKI\ontogpt-main\ontogpt-main\demo\owl\chunk_012_20260609_145806.ttl
+[14:58:06 INF] [Step 6] TTL file saved successfully!
+[14:58:06 INF] [Step 6] File size: 14479 bytes
+[14:58:06 INF] [Step 6] File: d:\PROJ\AI_WIKI\ontogpt-main\ontogpt-main\demo\owl\chunk_012_20260609_145806.ttl
+[14:58:06 INF] [严格提取] 成功生成 OWL 文件：d:\PROJ\AI_WIKI\ontogpt-main\ontogpt-main\demo\owl\chunk_012_20260609_145806.ttl
